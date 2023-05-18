@@ -1,448 +1,335 @@
-import { Client } from 'src/models/Client/Client';
-import { ClientRepositoryImpl } from 'src/repositories/ClientRepositoryImpl';
-import {
-  RemoveOptions,
-  RemoveOptions,
-  RemoveOptions,
-  RemoveOptions,
-  RemoveOptions,
-  Repository,
-  SaveOptions,
-  SaveOptions,
-  SaveOptions,
-  SaveOptions,
-  SaveOptions,
-  SelectQueryBuilder,
-} from 'typeorm';
+import { ClientRepositoryImpl } from '../../repositories/ClientRepositoryImpl';
+import { Client } from '../../models/Client/Client';
+import { CLIENT_PROPERTIES } from '../../models/Client/ClientProperties';
 import { ClientStub } from '../Stubs/ClientStub';
-import { Gender } from 'src/models/Client/Gender';
-import { ActivityLevel } from 'src/models/Client/ActivityLevel';
-import { ClientStatus } from 'src/models/user/ClientStatus';
+import { ClientServiceImpl } from '../../services/Client/ClientServiceImpl';
+import { ClientBuilder } from '../../Builders/ClientBuilder';
+import { ClientRegistrationDto } from '../../DTOS/ClientRegistrationDto';
+import { ClientStatus } from '../../models/user/ClientStatus';
+import { ActivityLevel } from '../../models/Client/ActivityLevel';
+import { DietaryRestriction } from '../../models/Client/DietaryRestriction';
+import bcrypt from 'bcrypt';
 
-class MockClientRepository
-  extends Repository<Client>
-  implements Partial<SelectQueryBuilder<Client>>
-{
-  constructor() {
-    super();
-  }
-
-  createQueryBuilder(alias?: string, queryRunner?: any) {
-    return this as unknown as SelectQueryBuilder<Client>;
-  }
-
-  where() {
-    return this as unknown as SelectQueryBuilder<Client>;
-  }
-
-  getMany() {
-    return [] as Client[];
-  }
-
-  getOne() {
-    return {} as Client;
-  }
-
-  save() {
-    return {} as Client;
-  }
-
-  delete() {
-    return {} as any;
-  }
-}
-
-describe('ClientRepositoryImpl', () => {
-  let clientRepository: ClientRepositoryImpl;
-  let mockClientRepository: jest.Mocked<Repository<Client>>;
+describe('ClientServiceImpl', () => {
+  let clientServiceImpl: ClientServiceImpl;
+  let clientRepository: jest.Mocked<ClientRepositoryImpl>;
 
   beforeEach(() => {
-    mockClientRepository = {
-      createQueryBuilder: jest.fn(),
-      where: jest.fn(),
-      getMany: jest.fn(),
-      getOne: jest.fn(),
-      save: jest.fn(),
-      delete: jest.fn(),
-    } as any;
+    clientRepository = {
+      find: jest.fn().mockResolvedValue([new ClientStub(), new ClientStub()]),
+      findBy: jest.fn().mockResolvedValue(new ClientStub()),
+      createClient: jest.fn().mockResolvedValue(new ClientStub()),
+      updateClient: jest.fn().mockResolvedValue(new ClientStub()),
+      deleteClient: jest.fn().mockResolvedValue(true),
+    } as unknown as jest.Mocked<ClientRepositoryImpl>;
 
-    clientRepository = new ClientRepositoryImpl(mockClientRepository);
+    jest.mock('bcrypt');
+    clientServiceImpl = new ClientServiceImpl(clientRepository);
   });
 
-  afterEach(() => {
-    jest.clearAllMocks();
-  });
-
-  describe('find', () => {
+  describe('findAll', () => {
     it('should return an array of clients', async () => {
-      const mockClients: Client[] = [new ClientStub(), new ClientStub()];
-      mockClientRepository.createQueryBuilder.mockReturnValueOnce(
-        mockClientRepository,
-      );
-      mockClientRepository.getMany.mockResolvedValueOnce(mockClients);
+      const clients = await clientServiceImpl.findAll();
 
-      const result = await clientRepository.find();
-
-      expect(mockClientRepository.createQueryBuilder).toHaveBeenCalledWith(
-        'client',
-      );
-      expect(mockClientRepository.getMany).toHaveBeenCalled();
-      expect(result).toEqual(mockClients);
+      expect(clientRepository.find).toHaveBeenCalledTimes(1);
+      expect(clients).toHaveLength(2);
+      expect(clients[0]).toBeInstanceOf(Client);
+      expect(clients[1]).toBeInstanceOf(Client);
     });
   });
 
-  describe('findByUsername', () => {
-    it('should return a client with the specified username', async () => {
-      const username = 'john.doe';
-      const mockClient: Client = {
-        id: '1',
-        userName: username,
-        generateAccessToken: function (): string {
-          throw new Error('Function not implemented.');
-        },
-        validatePassword: function (password: string): boolean {
-          throw new Error('Function not implemented.');
-        },
-        goal: '',
-        gender: Gender.Male,
-        activityLevel: ActivityLevel.Sedentary,
-        height: 0,
-        weight: 0,
-        dietaryRestrictions: [],
-        calorieTarget: 0,
-        macronutrientRatios: undefined,
-        mealSchedule: undefined,
-        waterIntake: 0,
-        allergies: [],
-        favoriteRecipes: [],
-        firstName: '',
-        lastName: '',
-        email: '',
-        password: '',
+  describe('create', () => {
+    it('should create a new client', async () => {
+      const clientDto: ClientRegistrationDto = {
+        userName: 'john.doe',
+        firstName: 'John',
+        lastName: 'Doe',
+        email: 'john.doe@example.com',
+        password: 'mypassword',
         status: ClientStatus.Active,
-        dateOfBirth: undefined,
-        phoneNumber: '',
+        dateOfBirth: new Date(),
+        phoneNumber: '1234567890',
         isAdmin: false,
-        hasId: function (): boolean {
-          throw new Error('Function not implemented.');
+        goal: 'lose_weight',
+        gender: 'male',
+        activityLevel: ActivityLevel.ExtraActive,
+        height: 180,
+        weight: 75,
+        dietaryRestrictions: [
+          DietaryRestriction.DairyFree,
+          DietaryRestriction.GlutenFree,
+        ],
+        calorieTarget: 2000,
+        macronutrientRatios: { carbs: 40, protein: 30, fat: 30 },
+        mealSchedule: {
+          breakfast: '08:00 AM',
+          lunch: '12:00 PM',
+          dinner: '06:00 PM',
         },
-        save: function (options?: SaveOptions): Promise<Client> {
-          throw new Error('Function not implemented.');
-        },
-        remove: function (options?: RemoveOptions): Promise<Client> {
-          throw new Error('Function not implemented.');
-        },
-        softRemove: function (options?: SaveOptions): Promise<Client> {
-          throw new Error('Function not implemented.');
-        },
-        recover: function (options?: SaveOptions): Promise<Client> {
-          throw new Error('Function not implemented.');
-        },
-        reload: function (): Promise<void> {
-          throw new Error('Function not implemented.');
-        },
+        waterIntake: 8,
+        allergies: ['peanuts'],
+        favoriteRecipes: [],
       };
-      mockClientRepository.createQueryBuilder.mockReturnValueOnce(
-        mockClientRepository,
-      );
-      mockClientRepository.where.mockReturnValueOnce(mockClientRepository);
-      mockClientRepository.getOne.mockResolvedValueOnce(mockClient);
 
-      const result = await clientRepository.findByUsername(username);
+      const expectedClient = new ClientBuilder()
+        .withUserName(clientDto.userName)
+        .withFirstName(clientDto.firstName)
+        .withLastName(clientDto.lastName)
+        .withEmail(clientDto.email)
+        .withPassword(clientDto.password)
+        .withStatus(clientDto.status)
+        .withDateOfBirth(clientDto.dateOfBirth)
+        .withPhoneNumber(clientDto.phoneNumber)
+        .withAdminStatus(clientDto.isAdmin)
+        .withGoal(clientDto.goal)
+        .withGender('extra_active')
+        .withActivityLevel(ActivityLevel.ExtraActive)
+        .withHeight(clientDto.height)
+        .withWeight(clientDto.weight)
+        .withDietaryRestrictions([
+          DietaryRestriction.DairyFree,
+          DietaryRestriction.GlutenFree,
+        ])
+        .withCalorieTarget(clientDto.calorieTarget)
+        .withMacronutrientRatios(clientDto.macronutrientRatios)
+        .withMealSchedule(clientDto.mealSchedule)
+        .withWaterIntake(clientDto.waterIntake)
+        .withAllergies(clientDto.allergies)
+        .withFavoriteRecipes(clientDto.favoriteRecipes)
+        .build();
 
-      expect(mockClientRepository.createQueryBuilder).toHaveBeenCalledWith(
-        'client',
+      const createClientSpy = jest.spyOn(clientRepository, 'createClient');
+
+      const createdClient = await clientServiceImpl.create(clientDto);
+
+      expect(createClientSpy).toHaveBeenCalledTimes(1);
+
+      expect(createClientSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userName: expectedClient.userName,
+          firstName: expectedClient.firstName,
+          lastName: expectedClient.lastName,
+          email: expectedClient.email,
+          status: expectedClient.status,
+          dateOfBirth: expectedClient.dateOfBirth,
+          phoneNumber: expectedClient.phoneNumber,
+          isAdmin: expectedClient.isAdmin,
+          goal: expectedClient.goal,
+          gender: expectedClient.gender,
+          activityLevel: expectedClient.activityLevel,
+          height: expectedClient.height,
+          weight: expectedClient.weight,
+          dietaryRestrictions: expect.arrayContaining(
+            expectedClient.dietaryRestrictions,
+          ),
+          calorieTarget: expectedClient.calorieTarget,
+          macronutrientRatios: expectedClient.macronutrientRatios,
+          mealSchedule: expectedClient.mealSchedule,
+          waterIntake: expectedClient.waterIntake,
+          allergies: expectedClient.allergies,
+          favoriteRecipes: expectedClient.favoriteRecipes,
+        }),
       );
-      expect(mockClientRepository.where).toHaveBeenCalledWith(
-        'client.username = :username',
-        { username },
+
+      expect(createdClient.userName).toBe(expectedClient.userName);
+      expect(createdClient.firstName).toBe(expectedClient.firstName);
+      expect(createdClient.lastName).toBe(expectedClient.lastName);
+      expect(createdClient.email).toBe(expectedClient.email);
+      expect(createdClient.status).toBe(expectedClient.status);
+      expect(createdClient.phoneNumber).toBe(expectedClient.phoneNumber);
+      expect(createdClient.isAdmin).toBe(expectedClient.isAdmin);
+      expect(createdClient.goal).toBe(expectedClient.goal);
+      expect(createdClient.gender).toBe(expectedClient.gender);
+      expect(createdClient.activityLevel).toBe(expectedClient.activityLevel);
+      expect(createdClient.height).toBe(expectedClient.height);
+      expect(createdClient.weight).toBe(expectedClient.weight);
+      expect(createdClient.dietaryRestrictions).toEqual(
+        expect.arrayContaining(expectedClient.dietaryRestrictions),
       );
-      expect(mockClientRepository.getOne).toHaveBeenCalled();
-      expect(result).toEqual(mockClient);
+      expect(createdClient.calorieTarget).toBe(expectedClient.calorieTarget);
     });
   });
 
   describe('findBy', () => {
-    it('should return a client with the specified property and value', async () => {
+    it('should return a client', async () => {
       const property: keyof Client = CLIENT_PROPERTIES.id;
-      const value = '1';
-      const mockClient: Client = {
-        id: value,
+      const value = '123';
+
+      const client = await clientServiceImpl.findBy(property, value);
+
+      expect(clientRepository.findBy).toHaveBeenCalledTimes(1);
+      expect(clientRepository.findBy).toHaveBeenCalledWith(property, value);
+      expect(client).toBeInstanceOf(Client);
+    });
+  });
+
+  describe('update', () => {
+    it('should update a client', async () => {
+      const clientDto: ClientRegistrationDto = {
         userName: 'john.doe',
-        generateAccessToken: function (): string {
-          throw new Error('Function not implemented.');
-        },
-        validatePassword: function (password: string): boolean {
-          throw new Error('Function not implemented.');
-        },
-        goal: '',
-        gender:
-          '/Users/I561100/Desktop/FitMealPlanner/fit-meal-planner-backend/src/models/Client/Gender'
-            .Male,
-        activityLevel:
-          '/Users/I561100/Desktop/FitMealPlanner/fit-meal-planner-backend/src/models/Client/ActivityLevel'
-            .Sedentary,
-        height: 0,
-        weight: 0,
-        dietaryRestrictions: [],
-        calorieTarget: 0,
-        macronutrientRatios: undefined,
-        mealSchedule: undefined,
-        waterIntake: 0,
-        allergies: [],
-        favoriteRecipes: [],
-        firstName: '',
-        lastName: '',
-        email: '',
-        password: '',
-        status:
-          '/Users/I561100/Desktop/FitMealPlanner/fit-meal-planner-backend/src/models/user/ClientStatus'
-            .Active,
-        dateOfBirth: undefined,
-        phoneNumber: '',
+        firstName: 'John',
+        lastName: 'Doe',
+        email: 'john.doe@example.com',
+        password: 'mypassword',
+        status: ClientStatus.Active,
+        dateOfBirth: new Date(),
+        phoneNumber: '1234567890',
         isAdmin: false,
-        hasId: function (): boolean {
-          throw new Error('Function not implemented.');
+        goal: 'lose_weight',
+        gender: 'male',
+        activityLevel: ActivityLevel.ExtraActive,
+        height: 180,
+        weight: 75,
+        dietaryRestrictions: [
+          DietaryRestriction.DairyFree,
+          DietaryRestriction.GlutenFree,
+        ],
+        calorieTarget: 2000,
+        macronutrientRatios: { carbs: 40, protein: 30, fat: 30 },
+        mealSchedule: {
+          breakfast: '08:00 AM',
+          lunch: '12:00 PM',
+          dinner: '06:00 PM',
         },
-        save: function (options?: SaveOptions): Promise<Client> {
-          throw new Error('Function not implemented.');
-        },
-        remove: function (options?: RemoveOptions): Promise<Client> {
-          throw new Error('Function not implemented.');
-        },
-        softRemove: function (options?: SaveOptions): Promise<Client> {
-          throw new Error('Function not implemented.');
-        },
-        recover: function (options?: SaveOptions): Promise<Client> {
-          throw new Error('Function not implemented.');
-        },
-        reload: function (): Promise<void> {
-          throw new Error('Function not implemented.');
-        },
-      };
-      mockClientRepository.createQueryBuilder.mockReturnValueOnce(
-        mockClientRepository,
-      );
-      mockClientRepository.where.mockReturnValueOnce(mockClientRepository);
-      mockClientRepository.getOne.mockResolvedValueOnce(mockClient);
-
-      const result = await clientRepository.findBy(property, value);
-
-      expect(mockClientRepository.createQueryBuilder).toHaveBeenCalledWith(
-        'client',
-      );
-      expect(mockClientRepository.where).toHaveBeenCalledWith(
-        `client.${property} = :value`,
-        { value },
-      );
-      expect(mockClientRepository.getOne).toHaveBeenCalled();
-      expect(result).toEqual(mockClient);
-    });
-  });
-
-  describe('createClient', () => {
-    it('should save and return the created client', async () => {
-      const clientData: Client = {
-        id: '1',
-        userName: 'john.doe',
-        generateAccessToken: function (): string {
-          throw new Error('Function not implemented.');
-        },
-        validatePassword: function (password: string): boolean {
-          throw new Error('Function not implemented.');
-        },
-        goal: '',
-        gender:
-          '/Users/I561100/Desktop/FitMealPlanner/fit-meal-planner-backend/src/models/Client/Gender'
-            .Male,
-        activityLevel:
-          '/Users/I561100/Desktop/FitMealPlanner/fit-meal-planner-backend/src/models/Client/ActivityLevel'
-            .Sedentary,
-        height: 0,
-        weight: 0,
-        dietaryRestrictions: [],
-        calorieTarget: 0,
-        macronutrientRatios: undefined,
-        mealSchedule: undefined,
-        waterIntake: 0,
-        allergies: [],
+        waterIntake: 8,
+        allergies: ['peanuts'],
         favoriteRecipes: [],
-        firstName: '',
-        lastName: '',
-        email: '',
-        password: '',
-        status:
-          '/Users/I561100/Desktop/FitMealPlanner/fit-meal-planner-backend/src/models/user/ClientStatus'
-            .Active,
-        dateOfBirth: undefined,
-        phoneNumber: '',
+      };
+
+      const expectedClient = new ClientBuilder()
+        .withUserName(clientDto.userName)
+        .withFirstName(clientDto.firstName)
+        .withLastName(clientDto.lastName)
+        .withEmail(clientDto.email)
+        .withPassword(clientDto.password)
+        .withStatus(clientDto.status)
+        .withDateOfBirth(clientDto.dateOfBirth)
+        .withPhoneNumber(clientDto.phoneNumber)
+        .withAdminStatus(clientDto.isAdmin)
+        .withGoal(clientDto.goal)
+        .withGender('extra_active')
+        .withActivityLevel(ActivityLevel.ExtraActive)
+        .withHeight(clientDto.height)
+        .withWeight(clientDto.weight)
+        .withDietaryRestrictions([
+          DietaryRestriction.DairyFree,
+          DietaryRestriction.GlutenFree,
+        ])
+        .withCalorieTarget(clientDto.calorieTarget)
+        .withMacronutrientRatios(clientDto.macronutrientRatios)
+        .withMealSchedule(clientDto.mealSchedule)
+        .withWaterIntake(clientDto.waterIntake)
+        .withAllergies(clientDto.allergies)
+        .withFavoriteRecipes(clientDto.favoriteRecipes)
+        .build();
+
+      const createClientSpy = jest.spyOn(clientRepository, 'createClient');
+      const updateClientSpy = jest.spyOn(clientRepository, 'updateClient');
+
+      const createdClient = await clientServiceImpl.create(clientDto);
+
+      expect(createClientSpy).toHaveBeenCalledTimes(1);
+
+      expect(createClientSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userName: expectedClient.userName,
+          firstName: expectedClient.firstName,
+          lastName: expectedClient.lastName,
+          email: expectedClient.email,
+          status: expectedClient.status,
+          dateOfBirth: expectedClient.dateOfBirth,
+          phoneNumber: expectedClient.phoneNumber,
+          isAdmin: expectedClient.isAdmin,
+          goal: expectedClient.goal,
+          gender: expectedClient.gender,
+          activityLevel: expectedClient.activityLevel,
+          height: expectedClient.height,
+          weight: expectedClient.weight,
+          dietaryRestrictions: expect.arrayContaining(
+            expectedClient.dietaryRestrictions,
+          ),
+          calorieTarget: expectedClient.calorieTarget,
+          macronutrientRatios: expectedClient.macronutrientRatios,
+          mealSchedule: expectedClient.mealSchedule,
+          waterIntake: expectedClient.waterIntake,
+          allergies: expectedClient.allergies,
+          favoriteRecipes: expectedClient.favoriteRecipes,
+        }),
+      );
+
+      expect(createdClient.userName).toBe(expectedClient.userName);
+      expect(createdClient.firstName).toBe(expectedClient.firstName);
+      expect(createdClient.lastName).toBe(expectedClient.lastName);
+      expect(createdClient.email).toBe(expectedClient.email);
+      expect(createdClient.status).toBe(expectedClient.status);
+      expect(createdClient.phoneNumber).toBe(expectedClient.phoneNumber);
+      expect(createdClient.isAdmin).toBe(expectedClient.isAdmin);
+      expect(createdClient.goal).toBe(expectedClient.goal);
+      expect(createdClient.gender).toBe(expectedClient.gender);
+      expect(createdClient.activityLevel).toBe(expectedClient.activityLevel);
+      expect(createdClient.height).toBe(expectedClient.height);
+      expect(createdClient.weight).toBe(expectedClient.weight);
+      expect(createdClient.dietaryRestrictions).toEqual(
+        expect.arrayContaining(expectedClient.dietaryRestrictions),
+      );
+      expect(createdClient.calorieTarget).toBe(expectedClient.calorieTarget);
+
+      createdClient.lastName = 'Marius marcel';
+      createdClient.firstName = 'Gheorghe';
+      createdClient.userName = 'vasile';
+
+      const updatedClient = await clientServiceImpl.update('1', createdClient);
+      expect(updateClientSpy).toHaveBeenCalledTimes(1);
+
+      const a = {
+        activityLevel: 'extra_active',
+        allergies: ['peanuts'],
+        calorieTarget: 2000,
+        dateOfBirth: '2023-05-17T12:44:23.867Z',
+        dietaryRestrictions: ['DairyFree', 'GlutenFree'],
+        email: 'john.doe@example.com',
+        firstName: 'Gheorghe',
+        gender: 'male',
+        goal: 'lose_weight',
+        height: 180,
         isAdmin: false,
-        hasId: function (): boolean {
-          throw new Error('Function not implemented.');
+        lastName: 'Marius marcel',
+        macronutrientRatios: { carbs: 40, fat: 30, protein: 30 },
+        mealSchedule: {
+          breakfast: '08=00 AM',
+          dinner: '06=00 PM',
+          lunch: '12=00 PM',
         },
-        save: function (options?: SaveOptions): Promise<Client> {
-          throw new Error('Function not implemented.');
-        },
-        remove: function (options?: RemoveOptions): Promise<Client> {
-          throw new Error('Function not implemented.');
-        },
-        softRemove: function (options?: SaveOptions): Promise<Client> {
-          throw new Error('Function not implemented.');
-        },
-        recover: function (options?: SaveOptions): Promise<Client> {
-          throw new Error('Function not implemented.');
-        },
-        reload: function (): Promise<void> {
-          throw new Error('Function not implemented.');
-        },
+        password:
+          '$2b$10$Frkuypap0T7LvWEqHSOna.RfPQpsJCWfonlsgc0vwvBLcgCEdICqS',
+        phoneNumber: '1234567890',
+        status: 'active',
+        userName: 'vasile',
+        waterIntake: 8,
+        weight: 75,
       };
-      const mockCreatedClient: Client = {
-        ...clientData,
-        generateAccessToken: function (): string {
-          throw new Error('Function not implemented.');
-        },
-        validatePassword: function (password: string): boolean {
-          throw new Error('Function not implemented.');
-        },
-        hasId: function (): boolean {
-          throw new Error('Function not implemented.');
-        },
-        save: function (options?: SaveOptions): Promise<Client> {
-          throw new Error('Function not implemented.');
-        },
-        remove: function (options?: RemoveOptions): Promise<Client> {
-          throw new Error('Function not implemented.');
-        },
-        softRemove: function (options?: SaveOptions): Promise<Client> {
-          throw new Error('Function not implemented.');
-        },
-        recover: function (options?: SaveOptions): Promise<Client> {
-          throw new Error('Function not implemented.');
-        },
-        reload: function (): Promise<void> {
-          throw new Error('Function not implemented.');
-        },
-      };
-      mockClientRepository.save.mockResolvedValueOnce(mockCreatedClient);
-
-      const result = await clientRepository.createClient(clientData);
-
-      expect(mockClientRepository.save).toHaveBeenCalledWith(clientData);
-      expect(result).toEqual(mockCreatedClient);
-    });
-  });
-
-  describe('updateClient', () => {
-    it('should update and return the updated client if it exists', async () => {
-      const id = '1';
-      const clientData: Partial<Client> = { userName: 'john.doe' };
-      const mockExistingClient: Client = {
-        id,
-        userName: 'jane.doe',
-        generateAccessToken: function (): string {
-          throw new Error('Function not implemented.');
-        },
-        validatePassword: function (password: string): boolean {
-          throw new Error('Function not implemented.');
-        },
-        goal: '',
-        gender:
-          '/Users/I561100/Desktop/FitMealPlanner/fit-meal-planner-backend/src/models/Client/Gender'
-            .Male,
-        activityLevel:
-          '/Users/I561100/Desktop/FitMealPlanner/fit-meal-planner-backend/src/models/Client/ActivityLevel'
-            .Sedentary,
-        height: 0,
-        weight: 0,
-        dietaryRestrictions: [],
-        calorieTarget: 0,
-        macronutrientRatios: undefined,
-        mealSchedule: undefined,
-        waterIntake: 0,
-        allergies: [],
-        favoriteRecipes: [],
-        firstName: '',
-        lastName: '',
-        email: '',
-        password: '',
-        status:
-          '/Users/I561100/Desktop/FitMealPlanner/fit-meal-planner-backend/src/models/user/ClientStatus'
-            .Active,
-        dateOfBirth: undefined,
-        phoneNumber: '',
-        isAdmin: false,
-        hasId: function (): boolean {
-          throw new Error('Function not implemented.');
-        },
-        save: function (options?: SaveOptions): Promise<Client> {
-          throw new Error('Function not implemented.');
-        },
-        remove: function (options?: RemoveOptions): Promise<Client> {
-          throw new Error('Function not implemented.');
-        },
-        softRemove: function (options?: SaveOptions): Promise<Client> {
-          throw new Error('Function not implemented.');
-        },
-        recover: function (options?: SaveOptions): Promise<Client> {
-          throw new Error('Function not implemented.');
-        },
-        reload: function (): Promise<void> {
-          throw new Error('Function not implemented.');
-        },
-      };
-      const mockUpdatedClient: Client = { id, ...clientData };
-      mockClientRepository.findBy.mockResolvedValueOnce(mockExistingClient);
-      mockClientRepository.save.mockResolvedValueOnce(mockUpdatedClient);
-
-      const result = await clientRepository.updateClient(id, clientData);
-
-      expect(mockClientRepository.findBy).toHaveBeenCalledWith(
-        CLIENT_PROPERTIES.id,
-        id,
+      expect(updateClientSpy).toHaveBeenCalledWith(
+        '1',
+        expect.objectContaining({
+          userName: a.userName,
+          firstName: a.firstName,
+          lastName: a.lastName,
+          email: a.email,
+          status: a.status,
+          phoneNumber: a.phoneNumber,
+          isAdmin: a.isAdmin,
+          goal: a.goal,
+          gender: a.gender,
+          activityLevel: a.activityLevel,
+          height: a.height,
+          weight: a.weight,
+          calorieTarget: a.calorieTarget,
+          macronutrientRatios: a.macronutrientRatios,
+          mealSchedule: a.mealSchedule,
+          waterIntake: a.waterIntake,
+          allergies: a.allergies,
+        }),
       );
-      expect(mockClientRepository.save).toHaveBeenCalledWith(
-        mockExistingClient,
-      );
-      expect(result).toEqual(mockUpdatedClient);
-    });
-
-    it('should return undefined if the client to update does not exist', async () => {
-      const id = '1';
-      const clientData: Partial<Client> = { userName: 'john.doe' };
-      mockClientRepository.findBy.mockResolvedValueOnce(undefined);
-
-      const result = await clientRepository.updateClient(id, clientData);
-
-      expect(mockClientRepository.findBy).toHaveBeenCalledWith(
-        CLIENT_PROPERTIES.id,
-        id,
-      );
-      expect(mockClientRepository.save).not.toHaveBeenCalled();
-      expect(result).toBeUndefined();
-    });
-  });
-
-  describe('deleteClient', () => {
-    it('should delete the client and return true if it exists', async () => {
-      const id = '1';
-      const mockDeleteResult = { affected: 1 };
-      mockClientRepository.delete.mockResolvedValueOnce(mockDeleteResult);
-
-      const result = await clientRepository.deleteClient(id);
-
-      expect(mockClientRepository.delete).toHaveBeenCalledWith(id);
-      expect(result).toBe(true);
-    });
-
-    it('should return false if the client to delete does not exist', async () => {
-      const id = '1';
-      const mockDeleteResult = { affected: 0 };
-      mockClientRepository.delete.mockResolvedValueOnce(mockDeleteResult);
-
-      const result = await clientRepository.deleteClient(id);
-
-      expect(mockClientRepository.delete).toHaveBeenCalledWith(id);
-      expect(result).toBe(false);
     });
   });
 });

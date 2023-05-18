@@ -1,9 +1,10 @@
 import { Entity, Column, PrimaryGeneratedColumn, BaseEntity } from 'typeorm';
+import { ClientStatus } from './ClientStatus';
 
 @Entity()
 export abstract class User extends BaseEntity {
   @PrimaryGeneratedColumn()
-  id: number;
+  id: string;
 
   @Column({ length: 100 })
   userName: string;
@@ -20,13 +21,13 @@ export abstract class User extends BaseEntity {
   @Column()
   password: string;
 
-  @Column({ nullable: true })
-  profilePictureUrl: string;
+  // @Column({ nullable: true })
+  // profilePictureUrl: string;
 
-  @Column({ default: true })
-  isActive: boolean;
+  @Column({ type: 'enum', enum: ClientStatus, default: ClientStatus.Active })
+  status: ClientStatus;
 
-  @Column({ nullable: true })
+  @Column({ nullable: false })
   dateOfBirth: Date;
 
   @Column({ nullable: true })

@@ -27,7 +27,7 @@ export abstract class User extends BaseEntity {
   @Column({ type: 'enum', enum: ClientStatus, default: ClientStatus.Active })
   status: ClientStatus;
 
-  @Column({ nullable: false })
+  @Column({ nullable: true })
   dateOfBirth: Date;
 
   @Column({ nullable: true })

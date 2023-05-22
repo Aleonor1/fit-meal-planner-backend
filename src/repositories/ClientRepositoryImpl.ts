@@ -26,7 +26,7 @@ export class ClientRepositoryImpl implements ClientRepository {
   }
 
   async findBy(property: keyof Client, value: string): Promise<Client> {
-    return this.clientRepository
+    return await this.clientRepository
       .createQueryBuilder('client')
       .where(`client.${property} = :value`, { value })
       .getOne();

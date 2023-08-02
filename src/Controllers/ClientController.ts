@@ -65,6 +65,12 @@ export class ClientController {
     try {
       this.logger.log('Registering a new client');
       const newClient = await this.clientService.create(client);
+      const mailService = MailService.getInstance();
+      mailService.sendMail(
+        'aleonornyikita@gmail.com',
+        'Activate your account',
+        'you can activate your account via this link:',
+      );
       delete newClient.password;
       return newClient;
     } catch (error) {
@@ -126,7 +132,7 @@ export class ClientController {
       });
 
       const emailSubject = 'Password Reset';
-      const resetPasswordUrl = `http://localhost:3000/reset-password?token=${token}`;
+      const resetPasswordUrl = `http://localhost:3002/reset-password?token=${token}`;
       const emailContent = `Hello ${client.userName},\n\nPlease click on the following link to reset your password: ${resetPasswordUrl}`;
 
       const mailService = MailService.getInstance();
@@ -193,6 +199,8 @@ export class ClientController {
     try {
       const { token } = body;
 
+      console.log('here');
+
       const decodedToken = jwt.verify(token, 'secretKey') as DecodedToken;
       const clientId = decodedToken?.clientId;
 
@@ -225,6 +233,50 @@ export class ClientController {
       this.logger.error('Failed to update client', error.stack);
       throw new HttpException(
         'Failed to update client',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Get('reset-password/:token')
+  async resetPassword(
+    @Param('token') token: string,
+    @Body() params: { newPassword: string },
+  ): Promise<void> {
+    try {
+      this.logger.log('Processing reset password request');
+
+      const decodedToken = jwt.verify(token, 'secretKey') as DecodedToken;
+      const clientId = decodedToken?.clientId;
+
+      const client = await this.clientService.findBy('id', clientId);
+      if (!client) {
+        this.logger.error('Client not found');
+        throw new HttpException('Client not found', HttpStatus.NOT_FOUND);
+      }
+
+      const hashedPassword = await this.clientService.hashPassword(
+        params.newPassword,
+      );
+      client.password = hashedPassword;
+
+      const updatedClient = await this.clientService.update(clientId, client);
+      if (!updatedClient) {
+        this.logger.error('Failed to update client password');
+        throw new HttpException(
+          'Failed to update client password',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+
+      this.logger.log('Password updated successfully');
+    } catch (error) {
+      this.logger.error(
+        'Failed to process reset password request',
+        error.stack,
+      );
+      throw new HttpException(
+        'Failed to process reset password request',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }

@@ -10,7 +10,7 @@ export class ClientRepositoryImpl implements ClientRepository {
   constructor(
     @InjectRepository(Client)
     private readonly clientRepository: Repository<Client>,
-  ) {}
+  ) { }
 
   async find(): Promise<Client[]> {
     return this.clientRepository.createQueryBuilder('client').getMany();

@@ -5,6 +5,7 @@ import {
   Get,
   HttpException,
   HttpStatus,
+  Inject,
   Logger,
   Param,
   Post,
@@ -14,16 +15,24 @@ import {
 import { Response } from 'express';
 import * as jwt from 'jsonwebtoken';
 import DecodedToken from 'src/DecodedToken';
-import { MailService } from 'src/MailService';
 import { Client } from 'src/models/Client/Client';
-import { ClientServiceImpl } from 'src/services/Client/ClientServiceImpl';
+import {
+  CLIENT_SERVICE,
+  ClientService,
+} from 'src/services/Client/ClientService';
+import { MAIL_SERVICE } from 'src/services/MailService';
+import { MailServiceImpl } from 'src/services/MailServiceImpl';
 
 @Controller('clients')
 export class ClientController {
   private readonly logger = new Logger(ClientController.name);
 
-  constructor(private readonly clientService: ClientServiceImpl, 
-    private readonly mailService: MailService) {}
+  constructor(
+    @Inject(CLIENT_SERVICE)
+    private readonly clientService: ClientService,
+    @Inject(MAIL_SERVICE)
+    private mailService: MailServiceImpl,
+  ) {}
 
   @Get()
   async getAll(): Promise<Client[]> {
@@ -48,7 +57,9 @@ export class ClientController {
       this.logger.error(error.message, error.stack);
       throw new HttpException(
         error.message,
-        error.message === 'Client not found' ? HttpStatus.NOT_FOUND : HttpStatus.INTERNAL_SERVER_ERROR,
+        error.message === 'Client not found'
+          ? HttpStatus.NOT_FOUND
+          : HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -57,28 +68,23 @@ export class ClientController {
   async register(@Body() client: Client): Promise<Client> {
     try {
       this.logger.log('Registering a new client');
-      const newClient = await this.clientService.create(client);
-      this.mailService.sendMail(
-        'aleonornyikita@gmail.com',
-        'Activate your account',
-        'you can activate your account via this link:',
-      );
-      delete newClient.password;
-      return newClient;
+      return await this.clientService.register(client);
     } catch (error) {
-      this.logger.error('Failed to register client', error.stack);
-      throw new HttpException(
-        'Failed to register client',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+      this.logger.error(error.message, error.stack);
+      throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
   @Post('login')
-  async login(@Body() loginParams: { userName: string; password: string }): Promise<any> {
+  async login(
+    @Body() loginParams: { userName: string; password: string },
+  ): Promise<any> {
     try {
       this.logger.log(`Logging in client: ${loginParams.userName}`);
-      const token = await this.clientService.login(loginParams.userName, loginParams.password);
+      const token = await this.clientService.login(
+        loginParams.userName,
+        loginParams.password,
+      );
       return { access_token: token };
     } catch (error) {
       this.logger.error('Invalid username or password');
@@ -108,7 +114,6 @@ export class ClientController {
       const emailSubject = 'Password Reset';
       const resetPasswordUrl = `http://localhost:3002/reset-password?token=${token}`;
       const emailContent = `Hello ${client.userName},\n\nPlease click on the following link to reset your password: ${resetPasswordUrl}`;
-
 
       await this.mailService.sendMail(client.email, emailSubject, emailContent);
 

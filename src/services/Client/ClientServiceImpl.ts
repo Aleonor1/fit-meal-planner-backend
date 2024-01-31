@@ -1,20 +1,27 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import * as jwt from 'jsonwebtoken';
+import { CLIENT_REPOSITORY } from 'src/repositories/ClientRepository';
 import { ClientBuilder } from '../../Builders/ClientBuilder';
 import { ClientRegistrationDto } from '../../DTOS/ClientRegistrationDto';
 import { Client } from '../../models/Client/Client';
 import { CLIENT_PROPERTIES } from '../../models/Client/ClientProperties';
 import { ClientStatus } from '../../models/user/ClientStatus';
 import { ClientRepositoryImpl } from '../../repositories/ClientRepositoryImpl';
+import { MAIL_SERVICE } from '../MailService';
+import { MailServiceImpl } from '../MailServiceImpl';
 import { ClientService } from './ClientService';
-import * as jwt from 'jsonwebtoken';
 
 
 @Injectable()
 export class ClientServiceImpl implements ClientService {
+  private readonly logger = new Logger(ClientServiceImpl.name);
+
   constructor(
-    @Inject(ClientRepositoryImpl)
+    @Inject(CLIENT_REPOSITORY)
     private clientsRepository: ClientRepositoryImpl,
+    @Inject(MAIL_SERVICE)
+    private mailService: MailServiceImpl,
   ) {}
 
   async findAll(): Promise<Client[]> {
@@ -39,6 +46,22 @@ export class ClientServiceImpl implements ClientService {
 
   async remove(id: string): Promise<void> {
     await this.clientsRepository.deleteClient(id);
+  }
+
+  async register(client: Client): Promise<Client> {
+    const newClient = await this.create(client);
+    try {
+      this.mailService.sendMail(
+        client.email,
+        'Activate your account',
+        'you can activate your account via this link:',
+      );
+    } catch (error) {
+      this.logger.error('Failed to send activation email', error.stack);
+      throw new Error('Failed to send activation email');
+    }
+    delete newClient.password;
+    return newClient;
   }
 
   private getEnumValueFromString<T>(

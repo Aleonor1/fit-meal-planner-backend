@@ -9,4 +9,6 @@ export interface ClientService {
   update(id: string, client: Client): Promise<Client>;
   validatePassword(id: string, password: string): Promise<boolean>;
   hashPassword(password: string): Promise<string>;
+  getOne(@Param('id') id: string): Promise<Client>;
+
 }

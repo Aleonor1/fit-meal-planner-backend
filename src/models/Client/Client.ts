@@ -1,9 +1,8 @@
-import { Entity, Column } from 'typeorm';
+import { Column, Entity } from 'typeorm';
 import { User } from '../user/User';
-import { Gender } from './Gender';
-import { DietaryRestriction } from './DietaryRestriction';
-import { Transform } from 'class-transformer';
 import { ActivityLevel } from './ActivityLevel';
+import { DietaryRestriction } from './DietaryRestriction';
+import { Gender } from './Gender';
 
 @Entity()
 export class Client extends User {

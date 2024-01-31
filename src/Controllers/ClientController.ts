@@ -3,29 +3,27 @@ import {
   Controller,
   Delete,
   Get,
-  Param,
-  Post,
-  Put,
   HttpException,
   HttpStatus,
   Logger,
+  Param,
+  Post,
+  Put,
   Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import * as jwt from 'jsonwebtoken';
+import DecodedToken from 'src/DecodedToken';
+import { MailService } from 'src/MailService';
 import { Client } from 'src/models/Client/Client';
 import { ClientServiceImpl } from 'src/services/Client/ClientServiceImpl';
-import * as bcrypt from 'bcrypt';
-import { MailService } from 'src/MailService';
-import { request } from 'express';
-import { Response } from 'express';
-import { JwtPayload } from 'jsonwebtoken';
-import DecodedToken from 'src/DecodedToken';
 
 @Controller('clients')
 export class ClientController {
   private readonly logger = new Logger(ClientController.name);
 
-  constructor(private readonly clientService: ClientServiceImpl) {}
+  constructor(private readonly clientService: ClientServiceImpl, 
+    private readonly mailService: MailService) {}
 
   @Get()
   async getAll(): Promise<Client[]> {
@@ -45,17 +43,12 @@ export class ClientController {
   async getOne(@Param('id') id: string): Promise<Client> {
     try {
       this.logger.log(`Getting client with ID: ${id}`);
-      const client = await this.clientService.findOne(id);
-      if (!client) {
-        this.logger.error('Client not found');
-        throw new HttpException('Client not found', HttpStatus.NOT_FOUND);
-      }
-      return client;
+      return await this.clientService.getOne(id);
     } catch (error) {
-      this.logger.error('Failed to retrieve client', error.stack);
+      this.logger.error(error.message, error.stack);
       throw new HttpException(
-        'Failed to retrieve client',
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        error.message,
+        error.message === 'Client not found' ? HttpStatus.NOT_FOUND : HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -65,8 +58,7 @@ export class ClientController {
     try {
       this.logger.log('Registering a new client');
       const newClient = await this.clientService.create(client);
-      const mailService = MailService.getInstance();
-      mailService.sendMail(
+      this.mailService.sendMail(
         'aleonornyikita@gmail.com',
         'Activate your account',
         'you can activate your account via this link:',
@@ -83,32 +75,14 @@ export class ClientController {
   }
 
   @Post('login')
-  async login(
-    @Body() loginParams: { userName: string; password: string },
-  ): Promise<any> {
+  async login(@Body() loginParams: { userName: string; password: string }): Promise<any> {
     try {
       this.logger.log(`Logging in client: ${loginParams.userName}`);
-      const client = await this.clientService.findBy(
-        'userName',
-        loginParams.userName,
-      );
-      const isPasswordValid = await bcrypt.compare(
-        loginParams.password,
-        client.password,
-      );
-      if (!client || !isPasswordValid) {
-        this.logger.error('Invalid username or password');
-        throw new HttpException(
-          'Invalid username or password',
-          HttpStatus.UNAUTHORIZED,
-        );
-      }
-      const payload = { userName: client.userName, sub: client.id };
-      return {
-        access_token: jwt.sign(payload, 'secretKey', { expiresIn: '1h' }),
-      };
+      const token = await this.clientService.login(loginParams.userName, loginParams.password);
+      return { access_token: token };
     } catch (error) {
-      throw new HttpException(error.message, error.status);
+      this.logger.error('Invalid username or password');
+      throw new HttpException(error.message, HttpStatus.UNAUTHORIZED);
     }
   }
 
@@ -135,9 +109,8 @@ export class ClientController {
       const resetPasswordUrl = `http://localhost:3002/reset-password?token=${token}`;
       const emailContent = `Hello ${client.userName},\n\nPlease click on the following link to reset your password: ${resetPasswordUrl}`;
 
-      const mailService = MailService.getInstance();
 
-      await mailService.sendMail(client.email, emailSubject, emailContent);
+      await this.mailService.sendMail(client.email, emailSubject, emailContent);
 
       this.logger.log('Password reset email sent successfully');
     } catch (error) {

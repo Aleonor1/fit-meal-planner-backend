@@ -1,16 +1,9 @@
+import { Injectable } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 
+@Injectable()
 export class MailService {
-  private static instance: MailService;
-
-  private constructor() {}
-
-  public static getInstance(): MailService {
-    if (!MailService.instance) {
-      MailService.instance = new MailService();
-    }
-    return MailService.instance;
-  }
+  constructor() {}
 
   public sendMail(email: string, mailTitle: string, mailContent: string) {
     const transporter = nodemailer.createTransport({

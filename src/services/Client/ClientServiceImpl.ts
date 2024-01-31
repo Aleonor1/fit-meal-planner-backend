@@ -1,15 +1,14 @@
-import { HttpException, Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
-import { ClientService } from './ClientService';
-import { Client } from '../../models/Client/Client';
-import { ClientRepositoryImpl } from '../../repositories/ClientRepositoryImpl';
-import { CLIENT_PROPERTIES } from '../../models/Client/ClientProperties';
-import { ClientRegistrationDto } from '../../DTOS/ClientRegistrationDto';
 import { ClientBuilder } from '../../Builders/ClientBuilder';
-import { Gender } from '../../models/Client/Gender';
-import { DietaryRestriction } from '../../models/Client/DietaryRestriction';
-import { ActivityLevel } from '../../models/Client/ActivityLevel';
+import { ClientRegistrationDto } from '../../DTOS/ClientRegistrationDto';
+import { Client } from '../../models/Client/Client';
+import { CLIENT_PROPERTIES } from '../../models/Client/ClientProperties';
 import { ClientStatus } from '../../models/user/ClientStatus';
+import { ClientRepositoryImpl } from '../../repositories/ClientRepositoryImpl';
+import { ClientService } from './ClientService';
+import * as jwt from 'jsonwebtoken';
+
 
 @Injectable()
 export class ClientServiceImpl implements ClientService {
@@ -20,6 +19,14 @@ export class ClientServiceImpl implements ClientService {
 
   async findAll(): Promise<Client[]> {
     return this.clientsRepository.find();
+  }
+
+  async getOne(id: string): Promise<Client> {
+    const client = await this.findOne(id);
+    if (!client) {
+      throw new Error('Client not found');
+    }
+    return client;
   }
 
   async findBy(property: keyof Client, value: string) {
@@ -82,5 +89,17 @@ export class ClientServiceImpl implements ClientService {
     const saltRounds = 10;
     const hash = await bcrypt.hash(password, saltRounds);
     return hash;
+  }
+
+  async login(userName: string, password: string): Promise<any> {
+    const client = await this.findBy('userName', userName);
+    const isPasswordValid = await bcrypt.compare(password, client.password);
+  
+    if (!client || !isPasswordValid) {
+      throw new Error('Invalid username or password');
+    }
+  
+    const payload = { userName: client.userName, sub: client.id };
+    return jwt.sign(payload, 'secretKey', { expiresIn: '1h' });
   }
 }

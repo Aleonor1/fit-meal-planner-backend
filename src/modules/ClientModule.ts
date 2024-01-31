@@ -1,6 +1,7 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, RequestMethod } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ClientController } from 'src/Controllers/ClientController';
+import { AuthMiddleware } from 'src/Middlewares/AuthMiddleware';
 import { Client } from 'src/models/Client/Client';
 import { CLIENT_REPOSITORY } from 'src/repositories/ClientRepository';
 import { ClientRepositoryImpl } from 'src/repositories/ClientRepositoryImpl';
@@ -18,4 +19,10 @@ import { MailServiceImpl } from 'src/services/MailServiceImpl';
   ],
   controllers: [ClientController],
 })
-export class ClientModule {}
+export class ClientModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(AuthMiddleware)
+      .forRoutes({ path: 'clients/:id', method: RequestMethod.PATCH });
+  }
+}

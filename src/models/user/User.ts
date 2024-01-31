@@ -6,7 +6,7 @@ export abstract class User extends BaseEntity {
   @PrimaryGeneratedColumn()
   id: string;
 
-  @Column({ length: 100 })
+  @Column({ length: 100, unique: true })
   userName: string;
 
   @Column({ length: 100 })

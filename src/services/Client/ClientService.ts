@@ -16,5 +16,10 @@ export interface ClientService {
   login(userName: string, password: string): Promise<any>;
   register(client: Client): Promise<Client>;
   findBy(property: keyof Client, value: string): Promise<Client>;
+  forgotPassword(userName: string): Promise<void>;
+  updatePassword(id: string, newPassword: string): Promise<void>;
+  resetPassword(token: string, newPassword: string): Promise<void>;
+  patch(id: string, partialClient: Partial<Client>): Promise<Client>;
+
 
 }

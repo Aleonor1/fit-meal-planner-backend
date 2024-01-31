@@ -6,11 +6,14 @@ import {
   HttpException,
   HttpStatus,
   Inject,
+  InternalServerErrorException,
   Logger,
   Param,
+  Patch,
   Post,
   Put,
   Res,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { Response } from 'express';
 import * as jwt from 'jsonwebtoken';
@@ -23,6 +26,14 @@ import {
 import { MAIL_SERVICE } from 'src/services/MailService';
 import { MailServiceImpl } from 'src/services/MailServiceImpl';
 
+interface LoginResponse {
+  access_token: string;
+}
+
+interface LoginParams {
+  userName: string;
+  password: string;
+}
 @Controller('clients')
 export class ClientController {
   private readonly logger = new Logger(ClientController.name);
@@ -76,11 +87,18 @@ export class ClientController {
   }
 
   @Post('login')
-  async login(
-    @Body() loginParams: { userName: string; password: string },
-  ): Promise<any> {
+  async login(@Body() loginParams: LoginParams): Promise<LoginResponse> {
+    this.logger.log(`Logging in client: ${loginParams.userName}`);
+
+    if (!loginParams.userName || !loginParams.password) {
+      this.logger.error('Username or password not provided');
+      throw new HttpException(
+        'Username or password not provided',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
     try {
-      this.logger.log(`Logging in client: ${loginParams.userName}`);
       const token = await this.clientService.login(
         loginParams.userName,
         loginParams.password,
@@ -88,35 +106,20 @@ export class ClientController {
       return { access_token: token };
     } catch (error) {
       this.logger.error('Invalid username or password');
-      throw new HttpException(error.message, HttpStatus.UNAUTHORIZED);
+      throw new HttpException(
+        'Invalid username or password',
+        HttpStatus.UNAUTHORIZED,
+      );
     }
   }
 
   @Post('forgot-password')
   async forgotPassword(@Body() params: { userName: string }): Promise<void> {
     try {
-      const userName = params.userName;
-
       this.logger.log(
-        `Processing forgot password request for userName: ${userName}`,
+        `Processing forgot password request for userName: ${params.userName}`,
       );
-
-      const client = await this.clientService.findBy('userName', userName);
-      if (!client) {
-        this.logger.error('Client not found');
-        throw new HttpException('Client not found', HttpStatus.NOT_FOUND);
-      }
-
-      const token = jwt.sign({ clientId: client.id }, 'secretKey', {
-        expiresIn: '1h',
-      });
-
-      const emailSubject = 'Password Reset';
-      const resetPasswordUrl = `http://localhost:3002/reset-password?token=${token}`;
-      const emailContent = `Hello ${client.userName},\n\nPlease click on the following link to reset your password: ${resetPasswordUrl}`;
-
-      await this.mailService.sendMail(client.email, emailSubject, emailContent);
-
+      await this.clientService.forgotPassword(params.userName);
       this.logger.log('Password reset email sent successfully');
     } catch (error) {
       this.logger.error(
@@ -124,8 +127,10 @@ export class ClientController {
         error.stack,
       );
       throw new HttpException(
-        'Failed to process forgot password request',
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        error.message,
+        error.message === 'Client not found'
+          ? HttpStatus.NOT_FOUND
+          : HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -136,36 +141,20 @@ export class ClientController {
     @Body() passwordData: { newPassword: string },
     @Res() response: Response,
   ): Promise<void> {
-    const newPassword = passwordData.newPassword;
     try {
-      const client = await this.clientService.findOne(id);
-
-      if (!client) {
-        this.logger.error('Client not found');
-        throw new HttpException('Client not found', HttpStatus.NOT_FOUND);
-      }
-
-      const hashedPassword = await this.clientService.hashPassword(newPassword);
-      client.password = hashedPassword;
-
-      const updatedClient = await this.clientService.update(id, client);
-
-      if (!updatedClient) {
-        this.logger.error('Failed to update client password');
-        throw new HttpException(
-          'Failed to update client password',
-          HttpStatus.INTERNAL_SERVER_ERROR,
-        );
-      }
-
+      await this.clientService.updatePassword(id, passwordData.newPassword);
       response
         .status(HttpStatus.OK)
         .json({ message: 'Password updated successfully' });
     } catch (error) {
       this.logger.error('Failed to update client password', error.stack);
       response
-        .status(HttpStatus.INTERNAL_SERVER_ERROR)
-        .json({ message: 'Failed to update client password' });
+        .status(
+          error.message === 'Client not found'
+            ? HttpStatus.NOT_FOUND
+            : HttpStatus.INTERNAL_SERVER_ERROR,
+        )
+        .json({ message: error.message });
     }
   }
 
@@ -216,6 +205,28 @@ export class ClientController {
     }
   }
 
+  @Patch(':id')
+  async patch(
+    @Param('id') id: string,
+    @Body() partialClient: Partial<Client>,
+  ): Promise<Client> {
+    try {
+      this.logger.log(`Patching client with ID: ${id}`);
+      const patchedClient = await this.clientService.patch(id, partialClient);
+      if (!patchedClient) {
+        this.logger.error('Client not found');
+        throw new HttpException('Client not found', HttpStatus.NOT_FOUND);
+      }
+      return patchedClient;
+    } catch (error) {
+      this.logger.error('Failed to patch client', error.stack);
+      throw new HttpException(
+        'Failed to patch client',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   @Get('reset-password/:token')
   async resetPassword(
     @Param('token') token: string,
@@ -223,30 +234,7 @@ export class ClientController {
   ): Promise<void> {
     try {
       this.logger.log('Processing reset password request');
-
-      const decodedToken = jwt.verify(token, 'secretKey') as DecodedToken;
-      const clientId = decodedToken?.clientId;
-
-      const client = await this.clientService.findBy('id', clientId);
-      if (!client) {
-        this.logger.error('Client not found');
-        throw new HttpException('Client not found', HttpStatus.NOT_FOUND);
-      }
-
-      const hashedPassword = await this.clientService.hashPassword(
-        params.newPassword,
-      );
-      client.password = hashedPassword;
-
-      const updatedClient = await this.clientService.update(clientId, client);
-      if (!updatedClient) {
-        this.logger.error('Failed to update client password');
-        throw new HttpException(
-          'Failed to update client password',
-          HttpStatus.INTERNAL_SERVER_ERROR,
-        );
-      }
-
+      await this.clientService.resetPassword(token, params.newPassword);
       this.logger.log('Password updated successfully');
     } catch (error) {
       this.logger.error(
@@ -254,8 +242,10 @@ export class ClientController {
         error.stack,
       );
       throw new HttpException(
-        'Failed to process reset password request',
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        error.message,
+        error.message === 'Client not found'
+          ? HttpStatus.NOT_FOUND
+          : HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }

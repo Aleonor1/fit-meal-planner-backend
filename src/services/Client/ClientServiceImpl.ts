@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import * as jwt from 'jsonwebtoken';
+import DecodedToken from 'src/DecodedToken';
 import { CLIENT_REPOSITORY } from 'src/repositories/ClientRepository';
 import { ClientBuilder } from '../../Builders/ClientBuilder';
 import { ClientRegistrationDto } from '../../DTOS/ClientRegistrationDto';
@@ -12,11 +13,11 @@ import { MAIL_SERVICE } from '../MailService';
 import { MailServiceImpl } from '../MailServiceImpl';
 import { ClientService } from './ClientService';
 
-
 @Injectable()
 export class ClientServiceImpl implements ClientService {
   private readonly logger = new Logger(ClientServiceImpl.name);
 
+  
   constructor(
     @Inject(CLIENT_REPOSITORY)
     private clientsRepository: ClientRepositoryImpl,
@@ -64,6 +65,38 @@ export class ClientServiceImpl implements ClientService {
     return newClient;
   }
 
+  async forgotPassword(userName: string): Promise<void> {
+    const client = await this.findBy('userName', userName);
+    if (!client) {
+      throw new Error('Client not found');
+    }
+
+    const token = jwt.sign({ clientId: client.id }, process.env.JWT_SECRET, {
+      expiresIn: process.env.JWT_EXPIRATION,
+    });
+
+    const emailSubject = 'Password Reset';
+    const resetPasswordUrl = `http://localhost:3002/reset-password?token=${token}`;
+    const emailContent = `Hello ${client.userName},\n\nPlease click on the following link to reset your password: ${resetPasswordUrl}`;
+
+    await this.mailService.sendMail(client.email, emailSubject, emailContent);
+  }
+
+  async updatePassword(id: string, newPassword: string): Promise<void> {
+    const client = await this.findOne(id);
+    if (!client) {
+      throw new Error('Client not found');
+    }
+
+    const hashedPassword = await this.hashPassword(newPassword);
+    client.password = hashedPassword;
+
+    const updatedClient = await this.update(id, client);
+    if (!updatedClient) {
+      throw new Error('Failed to update client password');
+    }
+  }
+
   private getEnumValueFromString<T>(
     enumType: T,
     stringValue: string,
@@ -97,6 +130,31 @@ export class ClientServiceImpl implements ClientService {
     return this.clientsRepository.updateClient(id, updated);
   }
 
+  async patch(id: string, partialClient: Partial<Client>): Promise<Client> {
+    return this.clientsRepository.updateClient(id, partialClient);
+  }
+
+  async resetPassword(token: string, newPassword: string): Promise<void> {
+    const decodedToken = jwt.verify(
+      token,
+      process.env.JWT_SECRET,
+    ) as DecodedToken;
+    const clientId = decodedToken?.clientId;
+
+    const client = await this.findBy('id', clientId);
+    if (!client) {
+      throw new Error('Client not found');
+    }
+
+    const hashedPassword = await this.hashPassword(newPassword);
+    client.password = hashedPassword;
+
+    const updatedClient = await this.update(clientId, client);
+    if (!updatedClient) {
+      throw new Error('Failed to update client password');
+    }
+  }
+
   async validatePassword(id: string, password: string): Promise<boolean> {
     const client = await this.clientsRepository.findBy(
       CLIENT_PROPERTIES.id,
@@ -117,11 +175,11 @@ export class ClientServiceImpl implements ClientService {
   async login(userName: string, password: string): Promise<any> {
     const client = await this.findBy('userName', userName);
     const isPasswordValid = await bcrypt.compare(password, client.password);
-  
+
     if (!client || !isPasswordValid) {
       throw new Error('Invalid username or password');
     }
-  
+
     const payload = { userName: client.userName, sub: client.id };
     return jwt.sign(payload, 'secretKey', { expiresIn: '1h' });
   }

@@ -1,19 +1,8 @@
-import { Transform } from 'class-transformer';
 import {
-  IsNotEmpty,
-  IsString,
   IsEmail,
-  IsDate,
-  IsOptional,
-  IsNumber,
-  IsEnum,
-  ArrayNotEmpty,
-  ArrayUnique,
-  IsBoolean,
+  IsNotEmpty,
+  IsString
 } from 'class-validator';
-import { DietaryRestriction } from 'src/models/Client/DietaryRestriction';
-import { Gender } from 'src/models/Client/Gender';
-import { ClientStatus } from 'src/models/user/ClientStatus';
 
 export class ClientRegistrationDto {
   @IsNotEmpty()
